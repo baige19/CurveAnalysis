@@ -10,7 +10,7 @@ namespace CurveAnalysis
 {
     public partial class Form1 : Form
     {
-      
+
         public Form1()
         {
             InitializeComponent();
@@ -95,48 +95,50 @@ namespace CurveAnalysis
 
             // 生成拟合曲线
             double[] yFit = new double[xs.Length];
-            double[] yyFit = new double[400*1000];
-            double[] xxFit = new double[yyFit.Length];
+
             for (int i = 0; i < xs.Length; i++)
                 yFit[i] = L_fit / (1 + Math.Exp(-k_fit * (xs[i] - x0_fit)));
 
-            for (int i = 0; i < yyFit.Length; i++)
+            int K = 200;            //斜率参数
+
+            //梯形数据
+            double x_trapezoid_fit = 0; //曲线向左偏移参数
+            double[] X_trapezoid = new double[K];
+            double[] Y_trapezoid = new double[K];
+
+            for (int i = 0; i < X_trapezoid.Length; i++)
             {
-                if(i == 0)
-                    yyFit[i] = MyCurve(i, yyFit.Length/1000);
+                if (i == 0)
+                    Y_trapezoid[i] = TrapezoidCurve(i, K);
                 else
-                    yyFit[i] = MyCurve(i, yyFit.Length/1000) *0.001 + yyFit[i-1] ;
-                xxFit[i] = (i/1000f)/100/10-0.15;
+                    Y_trapezoid[i] = TrapezoidCurve(i, K)  + Y_trapezoid[i - 1];
+                X_trapezoid[i] = i / 1000f + x_trapezoid_fit;
             }
 
+            //次方数据
+            double[] X_pow = new double[K];
+            double[] Y_pow3 = new double[K];
+            double[] Y_pow5 = new double[K];
 
-
+            for (int i = 0; i < K; i++)
+            {
+                X_pow[i] = i / 1000f;
+                //3次方数据
+                Y_pow3[i] = CurvePow3(i, K, 0, 10);
+                //5次方数据
+                Y_pow5[i] = CurvePow5(i, K, 0, 10);
+            }
 
             // --------------------------
             // 获取 Plot 对象
             var plt = formsPlot1.Plot;
             plt.Clear();
 
-            // 下采样显示（最多 10000 点）
-            int maxPoints = 10000;
-            int step = Math.Max(1, xs.Length / maxPoints);
-            int sampleCount = xs.Length / step;
-            var xsSample = new double[sampleCount];
-            var ysSample = new double[sampleCount];
-         
-            for (int i = 0, j = 0; i < xs.Length; i += step, j++)
-            {
-                xsSample[j] = xs[i];
-                ysSample[j] = ys[i];
-            }
-
             // 绘制原始数据
-            var scatter1 = plt.AddScatter(xsSample, ysSample, System.Drawing.Color.Blue);
+            var scatter1 = plt.AddScatter(xs, ys, System.Drawing.Color.Blue);
             scatter1.MarkerShape = MarkerShape.filledCircle;
             scatter1.MarkerSize = 5f;
             scatter1.Label = "原始数据";
-
-
 
             // 绘制拟合曲线
             var scatter2 = plt.AddScatter(xs, yFit, System.Drawing.Color.Red);
@@ -144,51 +146,80 @@ namespace CurveAnalysis
             scatter2.MarkerSize = 0f;
             scatter2.Label = $"拟合公式: y = {L_fit:F3}/(1 + exp(-{k_fit:F3}*(x - {x0_fit:F3})))";
 
-
             // 绘制梯形数据
-            var scatter3 = plt.AddScatter(xxFit, yyFit, System.Drawing.Color.Yellow);
-            scatter1.MarkerShape = MarkerShape.filledCircle;
-            scatter1.MarkerSize = 0f;
-            scatter1.Label = "梯形数据";
+            var scatter3 = plt.AddScatter(X_trapezoid, Y_trapezoid, System.Drawing.Color.Yellow);
+            scatter3.MarkerShape = MarkerShape.filledCircle;
+            scatter3.MarkerSize = 0f;
+            scatter3.Label = "梯形数据";
+
+            //绘制3次方数据
+            var scatter4 = plt.AddScatter(X_pow, Y_pow3, System.Drawing.Color.Green);
+            scatter4.MarkerShape = MarkerShape.filledCircle;
+            scatter4.MarkerSize = 0f;
+            scatter4.Label = "3次方数据";
+
+            //绘制5次方数据
+            var scatter5 = plt.AddScatter(X_pow, Y_pow5, System.Drawing.Color.Orange);
+            scatter5.MarkerShape = MarkerShape.filledCircle;
+            scatter5.MarkerSize = 0f;
+            scatter5.Label = "5次方数据";
 
             // 显示图例
             plt.Legend();
             formsPlot1.Refresh();
-
-            for(double i = 0;i<15;i++)
-            {
-                Console.WriteLine((6*Math.Pow(i/15,5)- 15 * Math.Pow(i/15, 4)+ 10 * Math.Pow(i/15, 3))*10.44);
-            }
         }
 
-        private double MyCurve(double t, double k)
+        //梯形曲线公式
+        private double TrapezoidCurve(double x, double k)
         {
-            double y,x0,x1,a,b,c;
+            double y;       //返回值
+            double x0, x1;  //阶梯分界点
+            double a, b, c; //阶梯函数系数
 
             a = 90;
             b = 20;
             c = 27.5;
 
-            t = t / 1000f;
-
             x0 = (b / k) / (a / (k * k));
             x1 = (b / k - c / k) / (-c / (k * k));
 
-            //Console.WriteLine((((x1 - x0)+k)*b/k)/2);
-
-            if (t < x0)
+            if (x < x0)
             {
-                y = a * t / (k * k);
+                y = x * a / (k * k);
             }
-            else if (t >= x0 && t < x1)
+            else if (x >= x0 && x < x1)
             {
                 y = b / k;
             }
             else
             {
-                y = -c * t / (k * k) + c / k;
+                y = x * (-c) / (k * k) + c / k;
             }
             return y;
+        }
+
+        //3次方曲线公式
+        private double CurvePow3(double x, double k, double yStart, double ySet)
+        {
+            double y;       //返回值
+
+            x = x / k;      //归一化，将时间限制在0到1之间
+
+            y = yStart + (ySet - yStart) * (3 * Math.Pow(x, 2) - 2 * Math.Pow(x, 3));
+
+            return y < ySet ? y : ySet;
+        }
+
+        //5次方曲线公式
+        private double CurvePow5(double x, double k, double yStart, double ySet)
+        {
+            double y;       //返回值
+
+            x = x / k;      //归一化，将时间限制在0到1之间
+
+            y = yStart + (ySet - yStart) * (6 * Math.Pow(x, 5) - 15 * Math.Pow(x, 4) + 10 * Math.Pow(x, 3));
+
+            return y < ySet ? y : ySet;
         }
 
     }
