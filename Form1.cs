@@ -5,24 +5,27 @@ using System.Windows.Forms;
 using ScottPlot;
 using MathNet.Numerics.LinearAlgebra;
 using MathNet.Numerics.Optimization;
+using System.Linq;
+using ScottPlot.Plottable;
+using System.Text.RegularExpressions;
 
 namespace CurveAnalysis
 {
     public partial class Form1 : Form
     {
-
+        private int K;//斜率参数
+        private string currentFilePath;//当前文件路径
         public Form1()
         {
             InitializeComponent();
-
-            LoadAndPlotCsv("data400.csv");
+            K = 100;
         }
 
         private void LoadAndPlotCsv(string filePath)
         {
             var xList = new List<double>();
             var yList = new List<double>();
-
+            
             // 读取 CSV 文件
             try
             {
@@ -99,45 +102,17 @@ namespace CurveAnalysis
             for (int i = 0; i < xs.Length; i++)
                 yFit[i] = L_fit / (1 + Math.Exp(-k_fit * (xs[i] - x0_fit)));
 
-            int K = 200;            //斜率参数
-
-            //梯形数据
-            double x_trapezoid_fit = 0; //曲线向左偏移参数
-            double[] X_trapezoid = new double[K];
-            double[] Y_trapezoid = new double[K];
-
-            for (int i = 0; i < X_trapezoid.Length; i++)
-            {
-                if (i == 0)
-                    Y_trapezoid[i] = TrapezoidCurve(i, K);
-                else
-                    Y_trapezoid[i] = TrapezoidCurve(i, K)  + Y_trapezoid[i - 1];
-                X_trapezoid[i] = i / 1000f + x_trapezoid_fit;
-            }
-
-            //次方数据
-            double[] X_pow = new double[K];
-            double[] Y_pow3 = new double[K];
-            double[] Y_pow5 = new double[K];
-
-            for (int i = 0; i < K; i++)
-            {
-                X_pow[i] = i / 1000f;
-                //3次方数据
-                Y_pow3[i] = CurvePow3(i, K, 0, 10);
-                //5次方数据
-                Y_pow5[i] = CurvePow5(i, K, 0, 10);
-            }
-
             // --------------------------
             // 获取 Plot 对象
             var plt = formsPlot1.Plot;
             plt.Clear();
 
+            (var xsSmall, var ysSmall) = Downsample(xs, ys, 1000);
+
             // 绘制原始数据
-            var scatter1 = plt.AddScatter(xs, ys, System.Drawing.Color.Blue);
+            var scatter1 = plt.AddScatter(xsSmall, ysSmall, System.Drawing.Color.Blue);
             scatter1.MarkerShape = MarkerShape.filledCircle;
-            scatter1.MarkerSize = 5f;
+            scatter1.MarkerSize = 0f;
             scatter1.Label = "原始数据";
 
             // 绘制拟合曲线
@@ -146,27 +121,92 @@ namespace CurveAnalysis
             scatter2.MarkerSize = 0f;
             scatter2.Label = $"拟合公式: y = {L_fit:F3}/(1 + exp(-{k_fit:F3}*(x - {x0_fit:F3})))";
 
-            // 绘制梯形数据
-            var scatter3 = plt.AddScatter(X_trapezoid, Y_trapezoid, System.Drawing.Color.Yellow);
-            scatter3.MarkerShape = MarkerShape.filledCircle;
-            scatter3.MarkerSize = 0f;
-            scatter3.Label = "梯形数据";
-
-            //绘制3次方数据
-            var scatter4 = plt.AddScatter(X_pow, Y_pow3, System.Drawing.Color.Green);
-            scatter4.MarkerShape = MarkerShape.filledCircle;
-            scatter4.MarkerSize = 0f;
-            scatter4.Label = "3次方数据";
-
-            //绘制5次方数据
-            var scatter5 = plt.AddScatter(X_pow, Y_pow5, System.Drawing.Color.Orange);
-            scatter5.MarkerShape = MarkerShape.filledCircle;
-            scatter5.MarkerSize = 0f;
-            scatter5.Label = "5次方数据";
-
             // 显示图例
             plt.Legend();
+            formsPlot1.Plot.AxisAuto();
             formsPlot1.Refresh();
+        }
+
+        //梯形与次方拟合公式绘制
+        private void DrawAuxiliaryCurves()
+        {
+            if (K <= 0) return; // 防止 K 为 0 或负数
+
+            var plt = formsPlot1.Plot;
+
+            // 清除之前的辅助曲线（保留原始数据和拟合曲线）
+            foreach (var p in plt.GetPlottables())
+            {
+                if (p is ScatterPlot sp)
+                {
+                    if (sp.Label == "梯形数据" || sp.Label == "3次方数据" || sp.Label == "5次方数据")
+                        plt.Remove(sp);
+                }
+            }
+
+            // -------------------- 梯形数据 --------------------
+            double x_trapezoid_fit = 0;
+            double[] X_trapezoid = new double[K+1];
+            double[] Y_trapezoid = new double[K+1];
+
+            for (int i = 0; i <= K; i++)
+            {
+                if (i == 0)
+                    Y_trapezoid[i] = TrapezoidCurve(i, K);
+                else
+                    Y_trapezoid[i] = TrapezoidCurve(i, K) + Y_trapezoid[i - 1];
+                X_trapezoid[i] = i / 1000.0 + x_trapezoid_fit;
+            }
+
+            var scatter3 = plt.AddScatter(X_trapezoid, Y_trapezoid, System.Drawing.Color.Yellow);
+            scatter3.MarkerShape = MarkerShape.filledCircle;
+            scatter3.MarkerSize = 5f;
+            scatter3.Label = "梯形数据";
+
+            // -------------------- 次方数据 --------------------
+            double[] X_pow = new double[K + 1];
+            double[] Y_pow3 = new double[K + 1];
+            double[] Y_pow5 = new double[K + 1];
+
+            for (int i = 0; i <= K; i++)
+            {
+                X_pow[i] = i / 1000.0;
+                Y_pow3[i] = CurvePow3(i, K, 0, 10);
+                Y_pow5[i] = CurvePow5(i, K, 0, 10);
+            }
+
+            var scatter4 = plt.AddScatter(X_pow, Y_pow3, System.Drawing.Color.Green);
+            scatter4.MarkerShape = MarkerShape.filledCircle;
+            scatter4.MarkerSize = 5f;
+            scatter4.Label = "3次方数据";
+
+            var scatter5 = plt.AddScatter(X_pow, Y_pow5, System.Drawing.Color.Orange);
+            scatter5.MarkerShape = MarkerShape.filledCircle;
+            scatter5.MarkerSize = 5f;
+            scatter5.Label = "5次方数据";
+
+            formsPlot1.Plot.AxisAuto();
+            formsPlot1.Refresh();
+        }
+
+        //采样
+        private (double[], double[]) Downsample(double[] xs, double[] ys, int maxPoints = 1000)
+        {
+            int N = xs.Length;
+            if (N <= maxPoints) return (xs, ys);
+
+            double[] xs2 = new double[maxPoints];
+            double[] ys2 = new double[maxPoints];
+
+            double step = (double)N / maxPoints;
+            for (int i = 0; i < maxPoints; i++)
+            {
+                int idx = (int)(i * step);
+                xs2[i] = xs[idx];
+                ys2[i] = ys[idx];
+            }
+
+            return (xs2, ys2);
         }
 
         //梯形曲线公式
@@ -222,5 +262,53 @@ namespace CurveAnalysis
             return y < ySet ? y : ySet;
         }
 
+        // K 值修改事件
+        private void numericK_ValueChanged(object sender, EventArgs e)
+        {
+            K = (int)numericK.Value;
+            RedrawCurve(); // 重新绘制曲线
+        }
+
+        private void btnLoadCsv_Click(object sender, EventArgs e)
+        {
+            using (OpenFileDialog ofd = new OpenFileDialog())
+            {
+                ofd.Filter = "CSV 文件 (*.csv)|*.csv|所有文件 (*.*)|*.*";
+                if (ofd.ShowDialog() == DialogResult.OK)
+                {
+                    currentFilePath = ofd.FileName; // 保存完整路径
+                    labelFileName.Text = Path.GetFileName(currentFilePath);
+
+                    SetKFromFileName();
+                    LoadAndPlotCsv(currentFilePath);
+                    DrawAuxiliaryCurves();
+                }
+            }
+        }
+
+        // 使用 K 值重新绘制当前曲线
+        private void RedrawCurve()
+        {
+            // 如果之前没有数据，则直接返回
+            if (!formsPlot1.Plot.GetPlottables().Any()) return;
+
+            // 重新绘制，K 值生效
+            DrawAuxiliaryCurves();
+        }
+
+        //从文件获取K值
+        private void SetKFromFileName()
+        {
+            if (string.IsNullOrEmpty(currentFilePath))
+                return;
+
+            string fileName = Path.GetFileNameWithoutExtension(currentFilePath); // dataXXX
+            Match match = Regex.Match(fileName, @"\d+"); // 匹配数字
+            if (match.Success)
+            {
+                K = int.Parse(match.Value); // 赋值给 K
+                numericK.Value = K;         // 同步到界面控件
+            }
+        }
     }
 }
