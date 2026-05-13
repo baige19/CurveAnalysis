@@ -15,10 +15,14 @@ namespace CurveAnalysis
     {
         private int K;//斜率参数
         private string currentFilePath;//当前文件路径
+        private double VSet;//终点电压
+        private double X_Move;//偏移坐标
         public Form1()
         {
             InitializeComponent();
             K = 100;
+            VSet = 10;
+            X_Move = 0;
         }
 
         private void LoadAndPlotCsv(string filePath)
@@ -139,13 +143,12 @@ namespace CurveAnalysis
             {
                 if (p is ScatterPlot sp)
                 {
-                    if (sp.Label == "梯形数据" || sp.Label == "3次方数据" || sp.Label == "5次方数据")
+                    if (sp.Label == "梯形数据" || sp.Label == "3次方数据" || sp.Label == "5次方数据" || sp.Label == "余弦数据")
                         plt.Remove(sp);
                 }
             }
 
             // -------------------- 梯形数据 --------------------
-            double x_trapezoid_fit = 0;
             double[] X_trapezoid = new double[K+1];
             double[] Y_trapezoid = new double[K+1];
 
@@ -155,7 +158,7 @@ namespace CurveAnalysis
                     Y_trapezoid[i] = TrapezoidCurve(i, K);
                 else
                     Y_trapezoid[i] = TrapezoidCurve(i, K) + Y_trapezoid[i - 1];
-                X_trapezoid[i] = i / 1000.0 + x_trapezoid_fit;
+                X_trapezoid[i] = i / 1000.0 + X_Move;
             }
 
             var scatter3 = plt.AddScatter(X_trapezoid, Y_trapezoid, System.Drawing.Color.Yellow);
@@ -163,17 +166,20 @@ namespace CurveAnalysis
             scatter3.MarkerSize = 5f;
             scatter3.Label = "梯形数据";
 
-            // -------------------- 次方数据 --------------------
+            // -------------------- 次方和余弦数据 --------------------
             double[] X_pow = new double[K + 1];
             double[] Y_pow3 = new double[K + 1];
             double[] Y_pow5 = new double[K + 1];
+            double[] Y_cos = new double[K + 1];
 
             for (int i = 0; i <= K; i++)
             {
-                X_pow[i] = i / 1000.0;
-                Y_pow3[i] = CurvePow3(i, K, 0, 10);
-                Y_pow5[i] = CurvePow5(i, K, 0, 10);
+                X_pow[i] = i / 1000.0+ X_Move;
+                Y_pow3[i] = CurvePow3(i, K, 0, VSet);
+                Y_pow5[i] = CurvePow5(i, K, 0, VSet);
+                Y_cos[i] = CurveCos(i, K, 0, VSet);
             }
+
 
             var scatter4 = plt.AddScatter(X_pow, Y_pow3, System.Drawing.Color.Green);
             scatter4.MarkerShape = MarkerShape.filledCircle;
@@ -184,6 +190,11 @@ namespace CurveAnalysis
             scatter5.MarkerShape = MarkerShape.filledCircle;
             scatter5.MarkerSize = 5f;
             scatter5.Label = "5次方数据";
+
+            var scatter6 = plt.AddScatter(X_pow, Y_cos, System.Drawing.Color.SaddleBrown);
+            scatter6.MarkerShape = MarkerShape.filledCircle;
+            scatter6.MarkerSize = 5f;
+            scatter6.Label = "余弦数据";
 
             formsPlot1.Plot.AxisAuto();
             formsPlot1.Refresh();
@@ -262,6 +273,19 @@ namespace CurveAnalysis
             return y < ySet ? y : ySet;
         }
 
+        //余弦曲线公式
+        private double CurveCos(double x, double k, double yStart, double ySet)
+        {
+            double y;       //返回值
+
+            x = x / k;      //归一化，将时间限制在0到1之间
+
+            y = yStart + (ySet - yStart) * ((1-Math.Cos(x*Math.PI))/2);
+
+            return y < ySet ? y : ySet;
+        }
+
+
         // K 值修改事件
         private void numericK_ValueChanged(object sender, EventArgs e)
         {
@@ -309,6 +333,20 @@ namespace CurveAnalysis
                 K = int.Parse(match.Value); // 赋值给 K
                 numericK.Value = K;         // 同步到界面控件
             }
+        }
+
+        private void numericX_ValueChanged(object sender, EventArgs e)
+        {
+            X_Move = (double)numericX.Value;
+
+            RedrawCurve();
+        }
+
+        private void numericV_ValueChanged(object sender, EventArgs e)
+        {
+            VSet = (double)numericV.Value;
+
+            RedrawCurve();
         }
     }
 }
