@@ -15,14 +15,19 @@ namespace CurveAnalysis
     {
         private int K;//斜率参数
         private string currentFilePath;//当前文件路径
+        private double VStart = 0;//起点电压
         private double VSet;//终点电压
+        private double VMax = 10;//满量程电压
         private double X_Move;//偏移坐标
+        private int V_T;//升至终点电压所需的时间
         public Form1()
         {
             InitializeComponent();
             K = 100;
             VSet = 10;
             X_Move = 0;
+
+            V_T = (int)Math.Ceiling(K * (VSet - VStart) / VMax);
         }
 
         private void LoadAndPlotCsv(string filePath)
@@ -135,6 +140,7 @@ namespace CurveAnalysis
         private void DrawAuxiliaryCurves()
         {
             if (K <= 0) return; // 防止 K 为 0 或负数
+            V_T = (int)Math.Ceiling(K * (VSet - VStart) / VMax);
 
             var plt = formsPlot1.Plot;
 
@@ -149,8 +155,8 @@ namespace CurveAnalysis
             }
 
             // -------------------- 梯形数据 --------------------
-            double[] X_trapezoid = new double[K+1];
-            double[] Y_trapezoid = new double[K+1];
+            double[] X_trapezoid = new double[K + 1];
+            double[] Y_trapezoid = new double[K + 1];
 
             for (int i = 0; i <= K; i++)
             {
@@ -167,17 +173,17 @@ namespace CurveAnalysis
             scatter3.Label = "梯形数据";
 
             // -------------------- 次方和余弦数据 --------------------
-            double[] X_pow = new double[K + 1];
-            double[] Y_pow3 = new double[K + 1];
-            double[] Y_pow5 = new double[K + 1];
-            double[] Y_cos = new double[K + 1];
+            double[] X_pow = new double[V_T + 1];
+            double[] Y_pow3 = new double[V_T + 1];
+            double[] Y_pow5 = new double[V_T + 1];
+            double[] Y_cos = new double[V_T + 1];
 
-            for (int i = 0; i <= K; i++)
+            for (int i = 0; i <= V_T; i++)
             {
                 X_pow[i] = i / 1000.0+ X_Move;
-                Y_pow3[i] = CurvePow3(i, K, 0, VSet);
-                Y_pow5[i] = CurvePow5(i, K, 0, VSet);
-                Y_cos[i] = CurveCos(i, K, 0, VSet);
+                Y_pow3[i] = CurvePow3(i, V_T, 0, VSet);
+                Y_pow5[i] = CurvePow5(i, V_T , 0, VSet);
+                Y_cos[i] = CurveCos(i, V_T, 0, VSet);
             }
 
 
@@ -250,11 +256,11 @@ namespace CurveAnalysis
         }
 
         //3次方曲线公式
-        private double CurvePow3(double x, double k, double yStart, double ySet)
+        private double CurvePow3(double x, double T, double yStart, double ySet)
         {
             double y;       //返回值
 
-            x = x / k;      //归一化，将时间限制在0到1之间
+            x = x / T;      //归一化，将时间限制在0到1之间
 
             y = yStart + (ySet - yStart) * (3 * Math.Pow(x, 2) - 2 * Math.Pow(x, 3));
 
@@ -262,11 +268,11 @@ namespace CurveAnalysis
         }
 
         //5次方曲线公式
-        private double CurvePow5(double x, double k, double yStart, double ySet)
+        private double CurvePow5(double x, double T, double yStart, double ySet)
         {
             double y;       //返回值
 
-            x = x / k;      //归一化，将时间限制在0到1之间
+            x = x / T;      //归一化，将时间限制在0到1之间
 
             y = yStart + (ySet - yStart) * (6 * Math.Pow(x, 5) - 15 * Math.Pow(x, 4) + 10 * Math.Pow(x, 3));
 
@@ -274,11 +280,11 @@ namespace CurveAnalysis
         }
 
         //余弦曲线公式
-        private double CurveCos(double x, double k, double yStart, double ySet)
+        private double CurveCos(double x, double T, double yStart, double ySet)
         {
             double y;       //返回值
 
-            x = x / k;      //归一化，将时间限制在0到1之间
+            x = x / T;      //归一化，将时间限制在0到1之间
 
             y = yStart + (ySet - yStart) * ((1-Math.Cos(x*Math.PI))/2);
 
@@ -290,6 +296,7 @@ namespace CurveAnalysis
         private void numericK_ValueChanged(object sender, EventArgs e)
         {
             K = (int)numericK.Value;
+
             RedrawCurve(); // 重新绘制曲线
         }
 
